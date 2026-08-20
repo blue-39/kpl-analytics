@@ -33,6 +33,7 @@ test("server-renders the KPL analytics dashboard", async () => {
   const html = await response.text();
   assert.match(html, /<title>KPL Data Lab/);
   assert.match(html, /英雄洞察/);
+  assert.match(html, /数据管理/);
   assert.match(html, /自然语言数据助理/);
   assert.match(html, /演示数据/);
   assert.doesNotMatch(html, /codex-preview|react-loading-skeleton|Your site is taking shape/);

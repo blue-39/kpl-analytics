@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import json
 import re
+from dataclasses import replace
 from datetime import date, timedelta
+from threading import RLock
 from typing import Any
 
 import httpx
@@ -30,14 +32,56 @@ class QueryAgent:
         settings: Settings | None = None,
     ) -> None:
         self.metrics = metrics
-        self.settings = settings or Settings.from_env()
+        self.base_settings = settings or Settings.from_env()
+        self.settings = self.base_settings
+        self._settings_lock = RLock()
+        self._settings_source = (
+            "environment"
+            if self.settings.llm_endpoint or self.settings.llm_model or self.settings.llm_api_key
+            else "none"
+        )
+
+    def configure_llm(self, endpoint: str, api_key: str, model: str) -> dict[str, Any]:
+        with self._settings_lock:
+            self.settings = replace(
+                self.base_settings,
+                llm_endpoint=endpoint,
+                llm_api_key=api_key,
+                llm_model=model,
+            )
+            self._settings_source = "runtime"
+            return self.llm_status()
+
+    def clear_runtime_llm(self) -> dict[str, Any]:
+        with self._settings_lock:
+            self.settings = self.base_settings
+            self._settings_source = (
+                "environment"
+                if self.settings.llm_endpoint
+                or self.settings.llm_model
+                or self.settings.llm_api_key
+                else "none"
+            )
+            return self.llm_status()
+
+    def llm_status(self) -> dict[str, Any]:
+        with self._settings_lock:
+            return {
+                "configured": bool(self.settings.llm_endpoint and self.settings.llm_model),
+                "endpoint": self.settings.llm_endpoint,
+                "model": self.settings.llm_model,
+                "has_api_key": bool(self.settings.llm_api_key),
+                "source": self._settings_source,
+            }
 
     def ask(self, request: NaturalLanguageQuery) -> dict[str, Any]:
         plan: QueryPlan
         planner = "rules"
-        if self.settings.llm_endpoint and self.settings.llm_model:
+        with self._settings_lock:
+            active_settings = self.settings
+        if active_settings.llm_endpoint and active_settings.llm_model:
             try:
-                plan = self._plan_with_llm(request)
+                plan = self._plan_with_llm(request, active_settings)
                 planner = "llm"
             except (httpx.HTTPError, ValueError, KeyError):
                 plan = self._plan_with_rules(request)
@@ -138,7 +182,7 @@ class QueryAgent:
             role=role,
         )
 
-    def _plan_with_llm(self, request: NaturalLanguageQuery) -> QueryPlan:
+    def _plan_with_llm(self, request: NaturalLanguageQuery, settings: Settings) -> QueryPlan:
         heroes = [{"id": row["hero_id"], "name": row["hero_name"]} for row in self.metrics.heroes()]
         players = [
             {"key": row["player_key"], "name": row["player_name"]} for row in self.metrics.players()
@@ -152,14 +196,14 @@ class QueryAgent:
             f"\n用户问题: {request.question}"
         )
         headers = {"Content-Type": "application/json"}
-        if self.settings.llm_api_key:
-            headers["Authorization"] = f"Bearer {self.settings.llm_api_key}"
+        if settings.llm_api_key:
+            headers["Authorization"] = f"Bearer {settings.llm_api_key}"
         response = httpx.post(
-            self.settings.llm_endpoint or "",
+            settings.llm_endpoint or "",
             headers=headers,
-            timeout=self.settings.request_timeout_seconds,
+            timeout=settings.request_timeout_seconds,
             json={
-                "model": self.settings.llm_model,
+                "model": settings.llm_model,
                 "messages": [
                     {"role": "system", "content": "你是电竞统计查询规划器。"},
                     {"role": "user", "content": prompt},
