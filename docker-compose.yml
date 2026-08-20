@@ -1,0 +1,21 @@
+services:
+  api:
+    build: .
+    environment:
+      KPL_DATA_DIR: /app/data
+      KPL_LLM_ENDPOINT: ${KPL_LLM_ENDPOINT:-}
+      KPL_LLM_API_KEY: ${KPL_LLM_API_KEY:-}
+      KPL_LLM_MODEL: ${KPL_LLM_MODEL:-}
+    volumes:
+      - ./data:/app/data
+    ports:
+      - "8000:8000"
+
+  web:
+    build: ./frontend
+    environment:
+      NEXT_PUBLIC_API_URL: http://127.0.0.1:8000
+    depends_on:
+      - api
+    ports:
+      - "3000:3000"
