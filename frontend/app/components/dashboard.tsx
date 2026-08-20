@@ -3,11 +3,12 @@
 import type { EChartsCoreOption } from "echarts/core";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import Chart from "./chart";
+import AdminView from "./admin-view";
 import { askAgent, loadDashboard, loadPlayer } from "../lib/api";
 import { demoData } from "../lib/demo-data";
 import type { DashboardData } from "../lib/types";
 
-type Mode = "hero" | "player" | "combo";
+type Mode = "hero" | "player" | "combo" | "admin";
 type PlayerData = {
   summary: Record<string, string | number>;
   heroes: Array<Record<string, string | number>>;
@@ -52,6 +53,26 @@ export default function Dashboard() {
   async function refresh() {
     setLoading(true);
     if (mode === "player") {
+      try {
+        setPlayerData(await loadPlayer(playerKey, startDate, endDate));
+        setConnected(true);
+      } catch {
+        setPlayerData(fallbackPlayer);
+        setConnected(false);
+      }
+    } else {
+      const result = await loadDashboard(heroId, startDate, endDate, role);
+      setData(result.data);
+      setConnected(result.connected);
+    }
+    setLoading(false);
+  }
+
+  async function selectMode(nextMode: Mode) {
+    setMode(nextMode);
+    if (nextMode === "admin") return;
+    setLoading(true);
+    if (nextMode === "player") {
       try {
         setPlayerData(await loadPlayer(playerKey, startDate, endDate));
         setConnected(true);
@@ -116,10 +137,11 @@ export default function Dashboard() {
     setAgentBusy(true);
     try {
       const response = await askAgent(question);
-      setAgentAnswer(`${response.answer} · 规划器：${response.planner}`);
+      const planner = response.planner === "llm" ? "大模型" : response.planner === "rules_fallback" ? "大模型失败，已回退规则" : "本地规则";
+      setAgentAnswer(`${response.answer} · 规划器：${planner}`);
       setConnected(true);
-    } catch {
-      setAgentAnswer("API 尚未启动，因此暂时无法执行自然语言查询。可运行 `kpl-analytics serve` 后重试。 ");
+    } catch (error) {
+      setAgentAnswer(error instanceof Error ? error.message : "自然语言查询执行失败。");
     }
     setAgentBusy(false);
   }
@@ -129,9 +151,10 @@ export default function Dashboard() {
       <header className="topbar">
         <div className="brand"><span className="brand-mark">K</span><span><strong>KPL DATA LAB</strong><small>王者荣耀职业联赛数据分析</small></span></div>
         <nav aria-label="主要视图">
-          <button className={mode === "hero" ? "active" : ""} onClick={() => setMode("hero")}>英雄洞察</button>
-          <button className={mode === "player" ? "active" : ""} onClick={() => setMode("player")}>选手档案</button>
-          <button className={mode === "combo" ? "active" : ""} onClick={() => setMode("combo")}>阵容组合</button>
+          <button className={mode === "hero" ? "active" : ""} onClick={() => void selectMode("hero")}>英雄洞察</button>
+          <button className={mode === "player" ? "active" : ""} onClick={() => void selectMode("player")}>选手档案</button>
+          <button className={mode === "combo" ? "active" : ""} onClick={() => void selectMode("combo")}>阵容组合</button>
+          <button className={mode === "admin" ? "active" : ""} onClick={() => void selectMode("admin")}>数据管理</button>
         </nav>
         <div className="status"><span className={connected ? "dot live" : "dot"} />{connected ? "本地 API 已连接" : "演示数据"}</div>
       </header>
@@ -150,7 +173,7 @@ export default function Dashboard() {
         </div>
       </section>
 
-      <section className="filters" aria-label="数据筛选">
+      {mode !== "admin" && <section className="filters" aria-label="数据筛选">
         <label>{mode === "player" ? "选择选手" : "选择英雄"}
           {mode === "player" ? (
             <select value={playerKey} onChange={(event) => setPlayerKey(event.target.value)}>{data.players.map((player) => <option value={player.player_key} key={player.player_key}>{player.player_name} · {player.team_name}</option>)}</select>
@@ -162,11 +185,12 @@ export default function Dashboard() {
         <label>结束日期<input type="date" value={endDate} onChange={(event) => setEndDate(event.target.value)} /></label>
         <label>分路<select value={role} disabled={mode === "player"} onChange={(event) => setRole(event.target.value)}><option value="">全部分路</option><option>对抗路</option><option>打野</option><option>中路</option><option>发育路</option><option>游走</option></select></label>
         <button className="primary" onClick={() => void refresh()} disabled={loading}>{loading ? "统计中…" : "应用筛选"}</button>
-      </section>
+      </section>}
 
       {mode === "hero" && <HeroView data={data} summary={summary} trendOption={trendOption} draftOption={draftOption} />}
       {mode === "player" && <PlayerView data={playerData} trendOption={playerTrendOption} />}
       {mode === "combo" && <ComboView data={data} />}
+      {mode === "admin" && <AdminView />}
 
       <section className="agent-panel">
         <div className="agent-label"><span>AI</span><div><h2>自然语言数据助理</h2><p>问题 → 受控查询计划 → 统计引擎 → 可核对答案</p></div></div>

@@ -21,8 +21,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="kpl-analytics")
     subparsers = parser.add_subparsers(dest="command", required=True)
 
-    backfill = subparsers.add_parser("backfill", help="archive recent public competition data")
-    backfill.add_argument("--days", type=int, default=730)
+    backfill = subparsers.add_parser("backfill", help="archive selected public competitions")
+    backfill.add_argument("--league-id", action="append", required=True)
     backfill.add_argument("--refresh", action="store_true")
 
     subparsers.add_parser("build", help="rebuild DuckDB from the raw archive")
@@ -45,7 +45,7 @@ def main() -> None:
     warehouse = Warehouse(settings)
 
     if args.command == "backfill":
-        summary = BackfillPipeline(settings).backfill(args.days, args.refresh)
+        summary = BackfillPipeline(settings).backfill(args.league_id, args.refresh)
         _print(asdict(summary))
     elif args.command == "build":
         _print(warehouse.rebuild_from_raw())
