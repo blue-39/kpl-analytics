@@ -209,6 +209,20 @@ tempCodeRunnerFile.py
 # PyPI configuration file
 .pypirc
 
+# Local analytics data and secrets
+data/raw/
+data/processed/
+*.duckdb
+*.duckdb.wal
+.env
+
+# Frontend outputs
+frontend/node_modules/
+frontend/.next/
+frontend/.vinext/
+frontend/dist/
+frontend/.wrangler/
+
 # Marimo
 marimo/_static/
 marimo/_lsp/
