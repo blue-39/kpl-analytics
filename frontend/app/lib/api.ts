@@ -56,21 +56,20 @@ export type LeagueOption = {
 
 export async function loadDashboard(
   heroId: number,
-  startDate: string,
-  endDate: string,
+  leagueId: string,
   role: string,
 ): Promise<{ data: DashboardData; connected: boolean }> {
   const query = new URLSearchParams();
-  if (startDate) query.set("start_date", startDate);
-  if (endDate) query.set("end_date", endDate);
+  if (leagueId) query.set("league_id", leagueId);
   if (role) query.set("role", role);
   const qs = query.toString() ? `?${query}` : "";
-  const globalQuery = new URLSearchParams();
-  if (startDate) globalQuery.set("start_date", startDate);
-  if (endDate) globalQuery.set("end_date", endDate);
+  const leagueQuery = new URLSearchParams();
+  if (leagueId) leagueQuery.set("league_id", leagueId);
+  const leagueQs = leagueQuery.toString() ? `?${leagueQuery}` : "";
   try {
-    const [meta, heroes, players, overview, matchups, teammates, builds, runes, combinations] = await Promise.all([
+    const [meta, leagues, heroes, players, overview, matchups, teammates, builds, runes, combinations] = await Promise.all([
       request<DashboardData["meta"]>("/api/meta"),
+      request<DashboardData["leagues"]>("/api/leagues"),
       request<DashboardData["heroes"]>("/api/heroes"),
       request<DashboardData["players"]>("/api/players"),
       request<Overview>(`/api/heroes/${heroId}/overview${qs}`),
@@ -78,9 +77,9 @@ export async function loadDashboard(
       request<ItemList>(`/api/heroes/${heroId}/teammates${qs}`),
       request<ItemList>(`/api/heroes/${heroId}/builds${qs}`),
       request<ItemList>(`/api/heroes/${heroId}/runes${qs}`),
-      request<ItemList>(`/api/combinations?${globalQuery}`),
+      request<ItemList>(`/api/combinations${leagueQs}`),
     ]);
-    return { data: { meta, heroes, players, overview, matchups, teammates, builds, runes, combinations }, connected: true };
+    return { data: { meta, leagues, heroes, players, overview, matchups, teammates, builds, runes, combinations }, connected: true };
   } catch {
     const selected = demoData.heroes.find((hero) => hero.hero_id === heroId);
     return {
@@ -92,15 +91,51 @@ export async function loadDashboard(
   }
 }
 
-export async function loadPlayer(playerKey: string, startDate: string, endDate: string) {
+export async function loadPlayer(playerKey: string, leagueId: string) {
   const query = new URLSearchParams();
-  if (startDate) query.set("start_date", startDate);
-  if (endDate) query.set("end_date", endDate);
+  if (leagueId) query.set("league_id", leagueId);
   return request<{
     summary: Record<string, string | number>;
     heroes: Array<Record<string, string | number>>;
     trend: Array<Record<string, string | number>>;
   }>(`/api/players/${encodeURIComponent(playerKey)}/overview?${query}`);
+}
+
+export async function loadCombinations(
+  size: 2 | 3,
+  heroIds: number[],
+  leagueId: string,
+) {
+  const query = new URLSearchParams({ size: String(size), min_games: "1" });
+  if (leagueId) query.set("league_id", leagueId);
+  heroIds.forEach((heroId) => query.append("hero_ids", String(heroId)));
+  return request<ItemList>(`/api/combinations?${query}`);
+}
+
+export type ComboSort = "games" | "win_rate";
+
+export async function loadCombinationRankings(
+  leagueId: string,
+  sortBy: ComboSort,
+  heroId: number | null = null,
+) {
+  const query = new URLSearchParams({
+    min_games: heroId === null ? "2" : "1",
+    limit: "30",
+    sort_by: sortBy,
+  });
+  if (leagueId) query.set("league_id", leagueId);
+  if (heroId !== null) query.set("hero_id", String(heroId));
+
+  const duoQuery = new URLSearchParams(query);
+  duoQuery.set("size", "2");
+  const trioQuery = new URLSearchParams(query);
+  trioQuery.set("size", "3");
+  const [duos, trios] = await Promise.all([
+    request<ItemList>(`/api/combinations?${duoQuery}`),
+    request<ItemList>(`/api/combinations?${trioQuery}`),
+  ]);
+  return { duos, trios };
 }
 
 export async function askAgent(question: string) {

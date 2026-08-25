@@ -115,9 +115,17 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     def meta(service: Metrics) -> dict:
         return service.metadata()
 
+    @api.get("/api/leagues")
+    def leagues(service: Metrics) -> list[dict]:
+        return service.leagues()
+
     @api.get("/api/heroes")
-    def heroes(service: Metrics) -> list[dict]:
-        return service.heroes()
+    def heroes(
+        service: Metrics,
+        role: str | None = None,
+        league_id: str | None = None,
+    ) -> list[dict]:
+        return service.heroes(role, league_id)
 
     @api.get("/api/players")
     def players(service: Metrics) -> list[dict]:
@@ -131,8 +139,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         hero_id: int | None = None,
         player_key: str | None = None,
         limit: Annotated[int, Query(ge=1, le=200)] = 50,
+        league_id: str | None = None,
     ) -> dict:
-        return service.recent_battles(start_date, end_date, hero_id, player_key, limit)
+        return service.recent_battles(
+            start_date, end_date, hero_id, player_key, limit, league_id
+        )
 
     @api.get("/api/battles/{battle_id}")
     def battle_detail(battle_id: str, service: Metrics) -> dict:
@@ -148,8 +159,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         start_date: str | None = None,
         end_date: str | None = None,
         role: str | None = None,
+        league_id: str | None = None,
     ) -> dict:
-        return service.hero_overview(hero_id, start_date, end_date, role)
+        return service.hero_overview(hero_id, start_date, end_date, role, league_id)
 
     @api.get("/api/heroes/{hero_id}/matchups")
     def hero_matchups(
@@ -159,8 +171,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         end_date: str | None = None,
         role: str | None = None,
         limit: Annotated[int, Query(ge=1, le=100)] = 20,
+        league_id: str | None = None,
     ) -> dict:
-        return service.hero_matchups(hero_id, start_date, end_date, role, limit)
+        return service.hero_matchups(
+            hero_id, start_date, end_date, role, limit, league_id
+        )
 
     @api.get("/api/heroes/{hero_id}/teammates")
     def hero_teammates(
@@ -170,8 +185,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         end_date: str | None = None,
         role: str | None = None,
         limit: Annotated[int, Query(ge=1, le=100)] = 20,
+        league_id: str | None = None,
     ) -> dict:
-        return service.hero_teammates(hero_id, start_date, end_date, role, limit)
+        return service.hero_teammates(
+            hero_id, start_date, end_date, role, limit, league_id
+        )
 
     @api.get("/api/heroes/{hero_id}/builds")
     def hero_builds(
@@ -181,8 +199,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         end_date: str | None = None,
         role: str | None = None,
         limit: Annotated[int, Query(ge=1, le=100)] = 12,
+        league_id: str | None = None,
     ) -> dict:
-        return service.hero_builds(hero_id, start_date, end_date, role, limit)
+        return service.hero_builds(
+            hero_id, start_date, end_date, role, limit, league_id
+        )
 
     @api.get("/api/heroes/{hero_id}/runes")
     def hero_runes(
@@ -192,8 +213,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         end_date: str | None = None,
         role: str | None = None,
         limit: Annotated[int, Query(ge=1, le=100)] = 20,
+        league_id: str | None = None,
     ) -> dict:
-        return service.hero_runes(hero_id, start_date, end_date, role, limit)
+        return service.hero_runes(hero_id, start_date, end_date, role, limit, league_id)
 
     @api.get("/api/combinations")
     def combinations(
@@ -202,8 +224,23 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         end_date: str | None = None,
         min_games: Annotated[int, Query(ge=1)] = 2,
         limit: Annotated[int, Query(ge=1, le=100)] = 30,
+        league_id: str | None = None,
+        size: Annotated[int, Query(ge=2, le=3)] = 2,
+        hero_ids: Annotated[list[int] | None, Query()] = None,
+        hero_id: int | None = None,
+        sort_by: str = "games",
     ) -> dict:
-        return service.combinations(start_date, end_date, min_games, limit)
+        return service.combinations(
+            start_date,
+            end_date,
+            min_games,
+            limit,
+            league_id,
+            size,
+            hero_ids,
+            hero_id,
+            sort_by,
+        )
 
     @api.get("/api/players/{player_key:path}/overview")
     def player_overview(
@@ -211,8 +248,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         service: Metrics,
         start_date: str | None = None,
         end_date: str | None = None,
+        league_id: str | None = None,
     ) -> dict:
-        return service.player_overview(player_key, start_date, end_date)
+        return service.player_overview(player_key, start_date, end_date, league_id)
 
     @api.post("/api/query")
     def natural_language_query(request: NaturalLanguageQuery) -> dict:
