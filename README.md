@@ -8,7 +8,9 @@
 
 - 按近 N 天增量归档公开联赛、比赛、小局和局详情 JSON；支持断点跳过及强制刷新。
 - 英雄选取率、禁用率、BP 率、胜率、KDA、月度趋势、分路和第几个 Pick 分布。
-- 同位置对位英雄、同队搭档、结束时完整出装、铭文使用和双英雄组合统计。
+- 支持分路优先的英雄搜索、赛事范围选择，以及俱乐部与选手搜索。
+- 同位置对位、同队搭档、单件装备出现率、完整 150 级铭文页和 2/3 英雄组合统计。
+- 同时展示全局第 1–10 个 Pick 与己方第 1–5 个 Pick 的选取顺位。
 - 选手胜率、KDA、MVP、英雄池和月度趋势。
 - 自然语言查询：规则规划器开箱即用；也可接入兼容 Chat Completions JSON 输出的模型 API。
 - 受控查询 DSL：模型只选择已经实现的统计动作，不能直接执行 SQL。
@@ -99,15 +101,16 @@ export KPL_LLM_MODEL="your-json-capable-model"
 | 路径 | 功能 |
 | --- | --- |
 | `GET /api/meta` | 数据模式、覆盖日期和样本规模 |
-| `GET /api/heroes` | 英雄列表与基础表现 |
+| `GET /api/leagues` | 已入库且有小局数据的赛事范围 |
+| `GET /api/heroes` | 英雄列表、出现分路与基础表现 |
 | `GET /api/battles` | 按英雄、选手和日期筛选小局 |
 | `GET /api/battles/{id}` | 单局 BP、双方、选手、装备和铭文详情 |
-| `GET /api/heroes/{id}/overview` | 英雄 BP、胜率、趋势、位置和 Pick 顺位 |
+| `GET /api/heroes/{id}/overview` | 英雄 BP、胜率、趋势、分路和两种 Pick 顺位 |
 | `GET /api/heroes/{id}/matchups` | 同位置对位统计 |
 | `GET /api/heroes/{id}/teammates` | 队友英雄统计 |
-| `GET /api/heroes/{id}/builds` | 完整出装统计 |
-| `GET /api/heroes/{id}/runes` | 铭文统计 |
-| `GET /api/combinations` | 双英雄组合 |
+| `GET /api/heroes/{id}/builds` | 单件装备出现率 |
+| `GET /api/heroes/{id}/runes` | 完整 150 级铭文页统计 |
+| `GET /api/combinations` | 2/3 英雄组合榜、单英雄包含查询或精确组合查询 |
 | `GET /api/players/{key}/overview` | 选手数据与英雄池 |
 | `POST /api/query` | 自然语言查询 |
 | `GET /api/admin/status` | 本地归档与数据库状态 |
@@ -118,7 +121,7 @@ export KPL_LLM_MODEL="your-json-capable-model"
 | `POST /api/admin/audit` | 启动数据完整性审计 |
 | `GET/POST /api/settings/llm` | 查看或写入进程内模型配置 |
 
-所有日期型接口支持 `start_date`、`end_date`，英雄接口另支持 `role`。
+统计接口支持 `league_id` 选择赛事；底层仍兼容 `start_date`、`end_date`，英雄接口另支持 `role`。组合接口使用 `size=2|3`，可通过 `sort_by=games|win_rate` 排序、用 `hero_id` 查询所有包含该英雄的组合，或重复传入 `hero_ids` 精确查询指定组合。
 
 ## 验证
 

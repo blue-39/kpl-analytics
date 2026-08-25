@@ -102,6 +102,7 @@ class QueryAgent:
         common = {
             "start_date": plan.start_date,
             "end_date": plan.end_date,
+            "league_id": plan.league_id,
         }
         if plan.analysis == AnalysisType.HERO_OVERVIEW:
             return self.metrics.hero_overview(plan.hero_id or 0, role=plan.role, **common)
@@ -122,7 +123,13 @@ class QueryAgent:
                 plan.hero_id or 0, role=plan.role, limit=plan.limit, **common
             )
         if plan.analysis == AnalysisType.COMBINATIONS:
-            return self.metrics.combinations(limit=plan.limit, **common)
+            return self.metrics.combinations(
+                limit=plan.limit,
+                size=plan.combination_size,
+                hero_ids=plan.hero_ids or None,
+                hero_id=plan.focus_hero_id,
+                **common,
+            )
         if plan.analysis == AnalysisType.PLAYER_OVERVIEW:
             return self.metrics.player_overview(plan.player_key or "", **common)
         raise QueryUnderstandingError(f"Unsupported analysis: {plan.analysis}")
@@ -130,6 +137,8 @@ class QueryAgent:
     def _plan_with_rules(self, request: NaturalLanguageQuery) -> QueryPlan:
         question = request.question.strip()
         start_date, end_date = self._extract_dates(question, request.start_date, request.end_date)
+        leagues = self.metrics.leagues()
+        league_id = request.league_id or self._match_league(question, leagues)
         role = request.role or next(
             (name for name in ("对抗路", "打野", "中路", "发育路", "游走") if name in question),
             None,
@@ -142,15 +151,29 @@ class QueryAgent:
             self.metrics.heroes(), key=lambda item: len(item["hero_name"]), reverse=True
         )
         player = next((item for item in players if item["player_name"] in question), None)
-        hero = next((item for item in heroes if item["hero_name"] in question), None)
+        named_heroes = [item for item in heroes if item["hero_name"] in question]
+        hero = named_heroes[0] if named_heroes else None
 
-        if any(word in question for word in ("组合", "双人组", "体系")) and hero is None:
+        if any(word in question for word in ("组合", "双人组", "三人组", "体系")):
+            combination_size = 3 if any(
+                word in question for word in ("3英雄", "三英雄", "三人", "三个英雄")
+            ) else 2
+            if len(named_heroes) in {2, 3}:
+                combination_size = len(named_heroes)
             return QueryPlan(
                 entity_type=EntityType.GLOBAL,
                 analysis=AnalysisType.COMBINATIONS,
                 start_date=start_date,
                 end_date=end_date,
+                league_id=league_id,
                 role=role,
+                hero_ids=(
+                    [item["hero_id"] for item in named_heroes]
+                    if len(named_heroes) in {2, 3}
+                    else []
+                ),
+                focus_hero_id=(named_heroes[0]["hero_id"] if len(named_heroes) == 1 else None),
+                combination_size=combination_size,
             )
         if player and ("选手" in question or hero is None):
             return QueryPlan(
@@ -159,6 +182,7 @@ class QueryAgent:
                 player_key=player["player_key"],
                 start_date=start_date,
                 end_date=end_date,
+                league_id=league_id,
                 role=role,
             )
         if not hero:
@@ -179,6 +203,7 @@ class QueryAgent:
             hero_id=hero["hero_id"],
             start_date=start_date,
             end_date=end_date,
+            league_id=league_id,
             role=role,
         )
 
@@ -187,12 +212,17 @@ class QueryAgent:
         players = [
             {"key": row["player_key"], "name": row["player_name"]} for row in self.metrics.players()
         ]
+        leagues = [
+            {"id": row["league_id"], "name": row["league_name"]}
+            for row in self.metrics.leagues()
+        ]
         schema = QueryPlan.model_json_schema()
         prompt = (
             "把用户问题转换为一个查询计划。只返回 JSON，不能返回 SQL。"
             f"\nQueryPlan JSON Schema: {json.dumps(schema, ensure_ascii=False)}"
             f"\n可用英雄: {json.dumps(heroes, ensure_ascii=False)}"
             f"\n可用选手: {json.dumps(players, ensure_ascii=False)}"
+            f"\n可用赛事: {json.dumps(leagues, ensure_ascii=False)}"
             f"\n用户问题: {request.question}"
         )
         headers = {"Content-Type": "application/json"}
@@ -218,8 +248,39 @@ class QueryAgent:
         plan_data = json.loads(content)
         plan_data.setdefault("start_date", request.start_date)
         plan_data.setdefault("end_date", request.end_date)
+        plan_data.setdefault("league_id", request.league_id)
         plan_data.setdefault("role", request.role)
         return QueryPlan.model_validate(plan_data)
+
+    @staticmethod
+    def _match_league(question: str, leagues: list[dict[str, Any]]) -> str | None:
+        if not leagues:
+            return None
+        if any(word in question for word in ("当前赛季", "本赛季", "最近赛事")):
+            return str(leagues[0]["league_id"])
+
+        def normalized(value: str) -> str:
+            return re.sub(r"[\s年]", "", value).replace("KPL", "").lower()
+
+        normalized_question = normalized(question)
+        for league in leagues:
+            name = normalized(str(league["league_name"]))
+            if name and name in normalized_question:
+                return str(league["league_id"])
+
+        season_words = ("春季赛", "夏季赛", "年度总决赛", "挑战者杯", "挑杯")
+        requested_season = next((word for word in season_words if word in question), None)
+        if requested_season:
+            years = re.findall(r"20\d{2}", question)
+            for league in leagues:
+                league_name = str(league["league_name"])
+                same_season = requested_season in league_name or (
+                    requested_season == "挑杯" and "挑战者杯" in league_name
+                )
+                same_year = not years or years[0] in league_name
+                if same_season and same_year:
+                    return str(league["league_id"])
+        return None
 
     @staticmethod
     def _extract_dates(

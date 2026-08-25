@@ -3,6 +3,16 @@ export type Hero = {
   hero_name: string;
   games: number;
   win_rate: number;
+  roles: string[];
+};
+
+export type League = {
+  league_id: string;
+  league_name: string;
+  start_date: string;
+  end_date: string;
+  battles: number;
+  matches: number;
 };
 
 export type Player = {
@@ -18,6 +28,7 @@ export type Overview = {
   summary: Record<string, string | number | null>;
   roles: Array<Record<string, string | number>>;
   draft_slots: Array<Record<string, string | number>>;
+  team_draft_slots: Array<Record<string, string | number>>;
   trend: Array<Record<string, string | number>>;
   sample_size: number;
 };
@@ -45,6 +56,7 @@ export type DashboardData = {
   meta: Meta;
   heroes: Hero[];
   players: Player[];
+  leagues: League[];
   overview: Overview;
   matchups: ItemList;
   teammates: ItemList;
